@@ -16,7 +16,7 @@ This project uses pycolmap which is a python wrapper for colmap, but it does not
 
 See file `INSTALL_COLMAP.md` for more info
 
-# Install FFMPEG
+### Install FFMPEG
 
 if you want to convert your video into single frames you need to download ffmpeg
 
