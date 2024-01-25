@@ -1,4 +1,4 @@
-'''
+"""
 -----------------------------------------------------------------------------
 Copyright (c) 2023, NVIDIA CORPORATION. All rights reserved.
 
@@ -8,7 +8,7 @@ and any modifications thereto. Any use, reproduction, disclosure or
 distribution of this software and related documentation without an express
 license agreement from NVIDIA CORPORATION is strictly prohibited.
 -----------------------------------------------------------------------------
-'''
+"""
 
 import numpy as np
 from argparse import ArgumentParser
@@ -23,8 +23,32 @@ sys.path.append(dir_path.__str__())
 
 print(dir_path)
 
-#from ..colmap.read_write_model import read_model, qvec2rotmat  # NOQA
+# from ..colmap.read_write_model import read_model, qvec2rotmat  # NOQA
 from scripts.third_party.colmap.read_write_model import read_model, qvec2rotmat
+
+from PIL import Image
+from PIL.ExifTags import TAGS, GPSTAGS
+
+
+def get_exif_data(image: Image):
+    try:
+        exif_data = image._getexif()
+
+        if exif_data is not None:
+            # Decode the EXIF data
+            decoded_exif = {
+                TAGS[key]: exif_data[key]
+                for key in exif_data.keys()
+                if key in TAGS and isinstance(exif_data[key], (int, str, bytes))
+            }
+            return decoded_exif
+        else:
+            print(f"No EXIF data found for image {image}")
+            return None
+
+    except Exception as e:
+        print(f"Error reading EXIF data: {e}")
+        return None
 
 
 def find_closest_point(p1, d1, p2, d2):
@@ -64,7 +88,9 @@ def bound_by_pose(images):
         src_frame = f[0:3, :]
         for g in poses:
             tgt_frame = g[0:3, :]
-            p = find_closest_point(src_frame[:, 3], src_frame[:, 2], tgt_frame[:, 3], tgt_frame[:, 2])
+            p = find_closest_point(
+                src_frame[:, 3], src_frame[:, 2], tgt_frame[:, 3], tgt_frame[:, 2]
+            )
             center += p
     center /= len(poses) ** 2
 
@@ -84,7 +110,9 @@ def bound_by_points(points3D):
     xyzs = np.stack([point.xyz for point in points3D.values()])
     center = xyzs.mean(axis=0)
     std = xyzs.std(axis=0)
-    radius = float(std.max() * 2)  # use 2*std to define the region, equivalent to 95% percentile
+    radius = float(
+        std.max() * 2
+    )  # use 2*std to define the region, equivalent to 95% percentile
     bounding_box = [
         [center[0] - std[0] * 3, center[0] + std[0] * 3],
         [center[1] - std[1] * 3, center[1] + std[1] * 3],
@@ -115,11 +143,15 @@ def check_concentric(images, ang_tol=np.pi / 6.0, radii_tol=0.5, pose_tol=0.5):
     vec_unit = vec / radii
     ang = np.arccos((look_at * vec_unit).sum(axis=-1, keepdims=True))
     ang_valid = ang < ang_tol
-    print(f"Fraction of images looking at the center: {ang_valid.sum()/num_images:.2f}.")
+    print(
+        f"Fraction of images looking at the center: {ang_valid.sum()/num_images:.2f}."
+    )
 
     radius_mean = radii.mean()
     radii_valid = np.isclose(radius_mean, radii, rtol=radii_tol)
-    print(f"Fraction of images positioned around the center: {radii_valid.sum()/num_images:.2f}.")
+    print(
+        f"Fraction of images positioned around the center: {radii_valid.sum()/num_images:.2f}."
+    )
 
     valid = ang_valid * radii_valid
     print(f"Valid fraction of concentric images: {valid.sum()/num_images:.2f}.")
@@ -133,8 +165,11 @@ def _cv_to_gl(cv):
     return gl
 
 
-def export_to_json(cameras, images, bounding_box, center, radius, file_path):
+def export_to_json(
+    cameras, images, points3D, bounding_box, center, radius, file_path, image_dir
+):
     intrinsic_param = np.array([camera.params for camera in cameras.values()])
+    print(cameras)
     fl_x = intrinsic_param[0][0]  # TODO: only supports single camera for now
     fl_y = intrinsic_param[0][1]
     cx = intrinsic_param[0][2]
@@ -146,6 +181,12 @@ def export_to_json(cameras, images, bounding_box, center, radius, file_path):
 
     angle_x = math.atan(w / (fl_x * 2)) * 2
     angle_y = math.atan(h / (fl_y * 2)) * 2
+
+    # sample point
+    # print(list(points3D.values())[0])
+    points = [
+        {"rgb": p[2].tolist(), "xyz": p[1].tolist()} for p in list(points3D.values())
+    ]
 
     out = {
         "camera_angle_x": angle_x,
@@ -165,11 +206,14 @@ def export_to_json(cameras, images, bounding_box, center, radius, file_path):
         "cy": cy,
         "w": int(w),
         "h": int(h),
-        "aabb_scale": np.exp2(np.rint(np.log2(radius))),  # power of two, for INGP resolution computation
+        "aabb_scale": np.exp2(
+            np.rint(np.log2(radius))
+        ),  # power of two, for INGP resolution computation
         "aabb_range": bounding_box,
         "sphere_center": center,
         "sphere_radius": radius,
         "frames": [],
+        "points": points,
     }
 
     # read poses
@@ -181,7 +225,34 @@ def export_to_json(cameras, images, bounding_box, center, radius, file_path):
         c2w = np.linalg.inv(w2c)
         c2w = _cv_to_gl(c2w)  # convert to GL convention used in iNGP
 
-        frame = {"file_path": "images/" + img.name, "transform_matrix": c2w.tolist()}
+        full_image_path = Path(f"{image_dir}/{img.name}")
+        metadata = None
+        if full_image_path.exists():
+            pil_image = Image.open(full_image_path)
+            exif_data = get_exif_data(pil_image)
+            width, height = pil_image.size
+            focal_length = None
+            lens_sensor_size = None
+            for k, v in exif_data.items():
+                if "focallength" in k.lower():
+                    focal_length = v
+                    if k == "FocalLengthIn35mmFilm":
+                        lens_sensor_size = 35
+                    break
+
+            metadata = {
+                "w": width,
+                "h": height,
+                "focal_length": focal_length,
+                "full_path": str(full_image_path),
+                "lens_sensor_size": lens_sensor_size
+            }
+
+        frame = {
+            "file_path": img.name,
+            "transform_matrix": c2w.tolist(),
+            "metadata": metadata,
+        }
         out["frames"].append(frame)
 
     with open(file_path, "w") as outputfile:
@@ -191,7 +262,9 @@ def export_to_json(cameras, images, bounding_box, center, radius, file_path):
 
 
 def data_to_json(args):
-    cameras, images, points3D = read_model(os.path.join(args.data_dir, "sparse"), ext=".bin")
+    cameras, images, points3D = read_model(
+        os.path.join(args.data_dir, "sparse"), ext=".bin"
+    )
 
     # define bounding regions based on scene type
     if args.scene_type == "outdoor":
@@ -209,8 +282,20 @@ def data_to_json(args):
         raise TypeError("Unknown scene type")
 
     # export json file
-    export_to_json(cameras, images, bounding_box, list(center), radius, os.path.join(args.data_dir, "transforms.json"))
-    print("Writing data to json file: ", os.path.join(args.data_dir, "transforms.json"))
+    export_to_json(
+        cameras,
+        images,
+        points3D,
+        bounding_box,
+        list(center),
+        radius,
+        os.path.join(args.data_dir, "transforms_withpoints.json"),
+        args.image_dir,
+    )
+    print(
+        "Writing data to json file: ",
+        os.path.join(args.data_dir, "transforms_withpoints.json"),
+    )
     return
 
 
@@ -224,6 +309,12 @@ if __name__ == "__main__":
         choices=["outdoor", "indoor", "object"],
         help="Select scene type. Outdoor for building-scale reconstruction; "
         "indoor for room-scale reconstruction; object for object-centric scene reconstruction.",
+    )
+    parser.add_argument(
+        "--image_dir",
+        type=str,
+        default=None,
+        help="Path to input images used for reconstruction",
     )
     args = parser.parse_args()
     data_to_json(args)
