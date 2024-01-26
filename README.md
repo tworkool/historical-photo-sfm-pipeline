@@ -29,3 +29,5 @@ Start Jupyter Lab
 `jupyter lab`
 
 Go to `main.ipynb` and go through the cells step by step
+
+NEXT: git submodule add COLMAP_GIT_URL third_party/colmap
