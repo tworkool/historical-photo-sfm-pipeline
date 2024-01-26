@@ -169,7 +169,6 @@ def export_to_json(
     cameras, images, points3D, bounding_box, center, radius, file_path, image_dir
 ):
     intrinsic_param = np.array([camera.params for camera in cameras.values()])
-    print(cameras)
     fl_x = intrinsic_param[0][0]  # TODO: only supports single camera for now
     fl_y = intrinsic_param[0][1]
     cx = intrinsic_param[0][2]
@@ -233,12 +232,13 @@ def export_to_json(
             width, height = pil_image.size
             focal_length = None
             lens_sensor_size = None
-            for k, v in exif_data.items():
-                if "focallength" in k.lower():
-                    focal_length = v
-                    if k == "FocalLengthIn35mmFilm":
-                        lens_sensor_size = 35
-                    break
+            if exif_data:
+                for k, v in exif_data.items():
+                    if "focallength" in k.lower():
+                        focal_length = v
+                        if k == "FocalLengthIn35mmFilm":
+                            lens_sensor_size = 35
+                        break
 
             metadata = {
                 "w": width,
