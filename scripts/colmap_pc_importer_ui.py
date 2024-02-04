@@ -1,5 +1,16 @@
 import json
 import bpy
+from bpy.props import (
+    StringProperty,
+    BoolProperty,
+    FloatProperty,
+    FloatVectorProperty,
+    PointerProperty,
+)
+from bpy.types import (
+    Operator,
+    PropertyGroup,
+)
 import bmesh
 from mathutils import Matrix, Vector
 import os
@@ -12,16 +23,21 @@ TRANSFORMATIONS_JSON = None
 MAX_POINT_CAP = None
 ITERATION_BATCH_SIZE = 1000
 DOWNSAMPLING = None
+DEFAULT_FOCAL_LENGTH = 36
 all_cameras = []
-selected_camera = None
+selected_camera = 0
 
 
 def get_cameras():
     return [obj for obj in bpy.context.scene.objects if obj.type == "CAMERA"]
 
 
-def set_active_camera(index=0, with_nav=False):
+def set_active_camera(index=0):
     global selected_camera
+    global all_cameras
+    print(len(all_cameras))
+    if len(all_cameras) == 0:
+        return
     selected_camera = index
     bpy.context.scene.camera = all_cameras[index]
     return
@@ -29,6 +45,7 @@ def set_active_camera(index=0, with_nav=False):
 
 all_cameras = get_cameras()
 set_active_camera()
+print(selected_camera)
 
 
 def adjust_scene(data):
@@ -85,7 +102,11 @@ def draw_frames(data):
             # background_image.image.use_alpha = False  # Set to True if your image has an alpha channel
 
             # other camera intrinsics
-            camera_obj.data.lens = frame_metadata["focal_length"]
+            camera_obj.data.lens = (
+                frame_metadata["focal_length"]
+                if frame_metadata["focal_length"]
+                else float(DEFAULT_FOCAL_LENGTH)
+            )
             if (
                 "lens_sensor_size" in frame_metadata
                 and frame_metadata["lens_sensor_size"]
@@ -118,7 +139,12 @@ def draw_points(data, start_p, end_p, downsampling=2):
 
         # Get the position and color of the point
         position = Vector(point["xyz"])
-        color = tuple(point["rgb"]) + (1,)  # Add alpha component
+        color = (
+            point["rgb"][0] / 255.0,
+            point["rgb"][1] / 255.0,
+            point["rgb"][2] / 255.0,
+            1,
+        )  # Add alpha component
 
         # Add the point to the BMesh object
         vert = points_bmesh.verts.new(position)
@@ -132,11 +158,11 @@ def draw_points(data, start_p, end_p, downsampling=2):
 
         for face in points_bmesh.faces:
             for loop in face.loops:
-                loop[color_layer] = [uniform(0, 1) for c in "rgb"] + [1]
+                loop[color_layer] = color  # = [uniform(0, 1) for c in "rgb"] + [1]
 
         # Assign color to the vertex directly
-        # for loop in vert.link_loops:
-        #    loop[color_layer] = color
+        for loop in vert.link_loops:
+            loop[color_layer] = color
 
     # Update the mesh with the new data
     points_bmesh.to_mesh(points_mesh)
@@ -169,35 +195,21 @@ def draw_point_batches(data, batch_size=1000, cap=None, downsampling=None):
 #    draw_point_batches(ITERATION_BATCH_SIZE, MAX_POINT_CAP, DOWNSAMPLING)
 
 
-class OpenBrowser(bpy.types.Operator):
-    bl_idname = "open.browser"
-    bl_label = "Open Transforms File (JSON)"
+class MyProperties(PropertyGroup):
+    """
+    slider bar, path, and everything else ....
+    """
 
-    filepath = bpy.props.StringProperty(subtype="FILE_PATH")
-    # somewhere to remember the address of the file
-
-    def execute(self, context):
-        display = "filepath = " + self.filepath
-        print(display)  # Prints to console
-        global TRANSFORMATIONS_JSON
-        # Load the data from the JSON file
-        with open(self.filepath) as f:
-            TRANSFORMATIONS_JSON = json.load(f)
-        # Window>>>Toggle systen console
-
-        return {"FINISHED"}
-
-    def invoke(self, context, event):  # See comments at end  [1]
-        context.window_manager.fileselect_add(self)
-        # Open browser, take reference to 'self'
-        # read the path to selected file,
-        # put path in declared string type data structure self.filepath
-
-        return {"RUNNING_MODAL"}
-        # Tells Blender to hang on for the slow user input
+    colmap_path: StringProperty(
+        name="File",
+        description="Choose a file:",
+        default="",
+        maxlen=1024,
+        subtype="FILE_PATH",
+    )
 
 
-class ColmapPCImporter_StartImport(bpy.types.Operator):
+class ColmapPCImporter_StartImport(Operator):
     bl_idname = "colmap_pc_importer.start_import"
     bl_label = "Import Point Cloud"
 
@@ -212,12 +224,12 @@ class ColmapPCImporter_StartImport(bpy.types.Operator):
                 TRANSFORMATIONS_JSON, ITERATION_BATCH_SIZE, MAX_POINT_CAP, DOWNSAMPLING
             )
             global all_cameras
-            all_cameras = [cam for cam in bpy.data.cameras]
+            all_cameras = get_cameras()
             set_active_camera(0)
         return {"FINISHED"}
 
 
-class ColmapPCImporter_Downsampling(bpy.types.Operator):
+class ColmapPCImporter_Downsampling(Operator):
     bl_idname = "colmap_pc_importer.downsampling"
     bl_label = "Downsampling"
     number = bpy.props.IntProperty(name="Downsampling Factor: ")
@@ -229,21 +241,42 @@ class ColmapPCImporter_Downsampling(bpy.types.Operator):
         return context.window_manager.invoke_props_dialog(self)
 
 
-class ColmapPCImporter_NextCamera(bpy.types.Operator):
+class ColmapPCImporter_NextCamera(Operator):
     bl_idname = "colmap_pc_importer.next_camera"
     bl_label = "Next Camera"
 
     def execute(self, context):
+        global selected_camera
+        print(selected_camera)
         set_active_camera((selected_camera + 1) % len(all_cameras))
         return {"FINISHED"}
 
 
-class ColmapPCImporter_PreviousCamera(bpy.types.Operator):
+class ColmapPCImporter_PreviousCamera(Operator):
     bl_idname = "colmap_pc_importer.previous_camera"
     bl_label = "Previous Camera"
 
     def execute(self, context):
+        global selected_camera
         set_active_camera((selected_camera - 1) % len(all_cameras))
+        return {"FINISHED"}
+
+
+class ColmapPCImporter_LoadData(Operator):
+    bl_idname = "colmap_pc_importer.load_data"
+    bl_label = "Load Data"
+    # somewhere to remember the address of the file
+
+    def execute(self, context):
+        path = context.scene.my_tool.colmap_path
+        display = "filepath = " + path
+        print(display)  # Prints to console
+        global TRANSFORMATIONS_JSON
+        # Load the data from the JSON file
+        with open(path) as f:
+            TRANSFORMATIONS_JSON = json.load(f)
+        # Window>>>Toggle systen console
+
         return {"FINISHED"}
 
 
@@ -255,32 +288,39 @@ class ColmapPCImporterPanel(bpy.types.Panel):
     bl_category = "Colmap Point Cloud Tools"
 
     def draw(self, context):
-        scn = context.scene
+        scene = context.scene
         layout = self.layout
+        mytool = scene.my_tool
 
         layout.label(text="Step 1: Load Transformations", icon="CUBE")
-        layout.operator(OpenBrowser.bl_idname)
+        layout.prop(mytool, "colmap_path")
+        layout.operator(ColmapPCImporter_LoadData.bl_idname)
+        layout.separator()
 
         layout.label(text="Step 2: Settings", icon="CUBE")
         layout.operator(ColmapPCImporter_Downsampling.bl_idname)
+        layout.separator()
 
         layout.label(text="Step 3: Start Import", icon="CUBE")
         layout.operator(ColmapPCImporter_StartImport.bl_idname)
+        layout.separator()
 
         layout.label(text="Step 4: Navigation", icon="CUBE")
         row = layout.row()
         row.operator(ColmapPCImporter_PreviousCamera.bl_idname)
         row.operator(ColmapPCImporter_NextCamera.bl_idname)
+        layout.separator()
 
         # bpy.props.IntProperty(name = "Downsampling Factor")
 
 
 classes = (
+    MyProperties,
     ColmapPCImporter_NextCamera,
     ColmapPCImporter_PreviousCamera,
     ColmapPCImporter_StartImport,
     ColmapPCImporter_Downsampling,
-    OpenBrowser,
+    ColmapPCImporter_LoadData,
     ColmapPCImporterPanel,
 )
 
@@ -289,10 +329,14 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
 
+    bpy.types.Scene.my_tool = PointerProperty(type=MyProperties)
+
 
 def unregister():
     for cls in classes:
         bpy.utils.unregister_class(cls)
+
+    del bpy.types.Scene.my_tool
 
 
 if __name__ == "__main__":
