@@ -1,3 +1,9 @@
+bl_info = {
+    "name": "COLMAP Point Cloud Importer",
+    "blender": (2, 90, 0),
+    "category": "Object",
+}
+
 import json
 import bpy
 from bpy.props import (
@@ -23,7 +29,8 @@ TRANSFORMATIONS_JSON = None
 MAX_POINT_CAP = None
 ITERATION_BATCH_SIZE = 1000
 DOWNSAMPLING = None
-DEFAULT_FOCAL_LENGTH = 36
+DEFAULT_FOCAL_LENGTH = 27
+DEFAULT_SENSOR_WIDTH = 35
 all_cameras = []
 selected_camera = 0
 
@@ -103,15 +110,16 @@ def draw_frames(data):
 
             # other camera intrinsics
             camera_obj.data.lens = (
-                frame_metadata["focal_length"]
+                "focal_length" in frame_metadata and frame_metadata["focal_length"]
                 if frame_metadata["focal_length"]
                 else float(DEFAULT_FOCAL_LENGTH)
             )
-            if (
-                "lens_sensor_size" in frame_metadata
+            camera_obj.data.sensor_width = (
+                frame_metadata["lens_sensor_size"]
+                if "lens_sensor_size" in frame_metadata
                 and frame_metadata["lens_sensor_size"]
-            ):
-                camera_obj.data.sensor_width = frame_metadata["lens_sensor_size"]
+                else float(DEFAULT_SENSOR_WIDTH)
+            )
 
     # Update the mesh with the new data
     frames_bmesh.to_mesh(frames_mesh)

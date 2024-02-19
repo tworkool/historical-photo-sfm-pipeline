@@ -11,6 +11,8 @@ root_dir = os.getcwd()
 MAX_POINT_CAP = None
 ITERATION_BATCH_SIZE = 1000
 DOWNSAMPLING = None
+DEFAULT_FOCAL_LENGTH = 27
+DEFAULT_SENSOR_WIDTH = 35
 
 
 def adjust_scene(data):
@@ -66,12 +68,16 @@ def draw_frames(data):
             # background_image.image.use_alpha = False  # Set to True if your image has an alpha channel
 
             # other camera intrinsics
-            camera_obj.data.lens = frame_metadata["focal_length"]
-            if (
-                "lens_sensor_size" in frame_metadata
-                and frame_metadata["lens_sensor_size"]
-            ):
-                camera_obj.data.sensor_width = frame_metadata["lens_sensor_size"]
+            camera_obj.data.lens = (
+                "focal_length" in frame_metadata and frame_metadata["focal_length"]
+                if frame_metadata["focal_length"]
+                else float(DEFAULT_FOCAL_LENGTH)
+            )
+            camera_obj.data.sensor_width = (
+                frame_metadata["lens_sensor_size"]
+                if "lens_sensor_size" in frame_metadata and frame_metadata["lens_sensor_size"]
+                else float(DEFAULT_SENSOR_WIDTH)
+            )
 
     # Update the mesh with the new data
     frames_bmesh.to_mesh(frames_mesh)
