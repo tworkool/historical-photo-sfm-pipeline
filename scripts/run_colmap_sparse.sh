@@ -7,10 +7,10 @@ if [ "$#" -ne 2 ]; then
     exit 1
 fi
 
-image_path="${1}/images_raw"
+image_path="${1}/image_path"
 sparse_path="${1}/sparse"
 db_path="${1}/database.db"
-use_gpu=true
+use_gpu=false
 
 mkdir -p ${sparse_path}
 mkdir -p ${image_path}
@@ -24,7 +24,7 @@ colmap feature_extractor \
     --ImageReader.camera_model=SIMPLE_RADIAL \
     --ImageReader.single_camera=false \
     --SiftExtraction.use_gpu="${use_gpu}" \
-    --SiftExtraction.num_threads=32 \
+    --SiftExtraction.num_threads=16 \
     --SiftExtraction.max_image_size=5000 \
     --SiftExtraction.max_num_features=10000
 

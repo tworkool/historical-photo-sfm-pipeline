@@ -8,7 +8,7 @@ if [ "$#" -ne 1 ]; then
 fi
 
 project_path="${1}"
-image_path="${project_path}/images_raw"
+image_path="${project_path}/image_path"
 sparse_path="${project_path}/sparse"
 dense_path="${project_path}/dense"
 db_path="${project_path}/database.db"
