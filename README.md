@@ -10,6 +10,8 @@
 
 `sudo apt update`
 
+`pip install -r requirements.txt`
+
 ### Install Colmap
 
 Pre install:
