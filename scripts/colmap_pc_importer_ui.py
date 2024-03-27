@@ -26,6 +26,7 @@ import time
 root_dir = os.getcwd()
 
 TRANSFORMATIONS_JSON = None
+PROJECT_PATH = None
 MAX_POINT_CAP = None
 ITERATION_BATCH_SIZE = 1000
 DOWNSAMPLING = None
@@ -100,9 +101,13 @@ def draw_frames(data):
         frame_metadata = frame["metadata"] if "metadata" in frame else None
         if frame_metadata:
             # Set the background image for the camera
-            background_image_path = frame["metadata"][
-                "full_path"
+            background_image_path = frame[
+                "file_path"
             ]  # Set the path to your background image
+            background_image_path = os.path.join(
+                PROJECT_PATH, "image_path", background_image_path
+            )
+            print(background_image_path)
             camera_obj.data.show_background_images = True
             background_image = camera_obj.data.background_images.new()
             background_image.image = bpy.data.images.load(background_image_path)
@@ -280,9 +285,13 @@ class ColmapPCImporter_LoadData(Operator):
         display = "filepath = " + path
         print(display)  # Prints to console
         global TRANSFORMATIONS_JSON
+        global PROJECT_PATH
         # Load the data from the JSON file
         with open(path) as f:
             TRANSFORMATIONS_JSON = json.load(f)
+        PROJECT_PATH = "\\" + path.split('\\')[-1]
+        PROJECT_PATH = path.replace(PROJECT_PATH, "")
+        print("PROJECT PATH = ", PROJECT_PATH)
         # Window>>>Toggle systen console
 
         return {"FINISHED"}
