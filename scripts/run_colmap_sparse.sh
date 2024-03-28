@@ -10,7 +10,7 @@ fi
 image_path="${1}/image_path"
 sparse_path="${1}/sparse"
 db_path="${1}/database.db"
-use_gpu=false
+use_gpu=1
 
 mkdir -p ${sparse_path}
 mkdir -p ${image_path}
