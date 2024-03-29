@@ -45,6 +45,7 @@ colmap patch_match_stereo \
     --workspace_format=COLMAP \
     --PatchMatchStereo.max_image_size=3000 \
     --PatchMatchStereo.num_samples=20 \
+    --PatchMatchStereo.geom_consistency=1 \
     --PatchMatchStereo.geom_consistency_regularizer=1 \
     --PatchMatchStereo.filter_min_num_consistent=0 \
     --PatchMatchStereo.filter_min_triangulation_angle=0 \
@@ -56,7 +57,7 @@ colmap patch_match_stereo \
 colmap stereo_fusion \
     --workspace_path="${dense_path}" \
     --workspace_format=COLMAP \
-    --output_path="${dense_path}/dense.ply" \
+    --output_path="${dense_path}/fused.ply" \
     --StereoFusion.max_num_pixels=10000000 \
     --StereoFusion.max_normal_error=1000000 \
     --StereoFusion.max_reproj_error=3

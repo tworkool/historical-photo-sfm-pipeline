@@ -26,7 +26,10 @@ colmap feature_extractor \
     --SiftExtraction.use_gpu="${use_gpu}" \
     --SiftExtraction.num_threads=16 \
     --SiftExtraction.max_image_size=5000 \
-    --SiftExtraction.max_num_features=10000
+    --SiftExtraction.max_num_features=10000 \
+    --SiftExtraction.estimate_affine_shape=1 \
+    --SiftExtraction.domain_size_pooling=1 \
+    --SiftMatching.guided_matching=1
 
 colmap sequential_matcher \
     --database_path="${db_path}" \
