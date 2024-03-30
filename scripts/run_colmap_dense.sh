@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# usage: run_colmap_sparse.sh <project_path>
+# usage: run_colmap_dense.sh <project_path>
 
 if [ "$#" -ne 1 ]; then
     echo "Usage: $0 <project_path>"
